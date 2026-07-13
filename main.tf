@@ -1,43 +1,55 @@
+variable "resource_group_name" {
+  default = "aks-production-rg"
+}
 
-variable client_id {}
-variable client_secret {}
+variable "location" {
+  default = "eastus"
+}
 
+variable "cluster_name" {
+  default = "aks-production-cluster"
+}
 
-resource "azurerm_resource_group" "aks_rg" {
+variable "dns_prefix" {
+  default = "productionaks"
+}
+
+resource "azurerm_resource_group" "rg" {
   name     = var.resource_group_name
   location = var.location
 }
+
 resource "azurerm_container_registry" "acr" {
-  name                = "myregistrydevops2026withsp" # Must be globally unique
-  resource_group_name = azurerm_resource_group.aks.name
-  location            = azurerm_resource_group.aks.location
+  name                = "pythondockeracr20261111"  # Must be globally unique
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
   sku                 = "Standard"
+  admin_enabled       = true
 }
 
-# Grants AKS permission to pull from your ACR
-resource "azurerm_role_assignment" "aks_to_acr" {
-  scope                = azurerm_container_registry.acr.id
-  role_definition_name = "AcrPull"
-  principal_id         = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
-}
 resource "azurerm_kubernetes_cluster" "aks" {
-  name                = var.cluster_name
-  location            = var.azurerm_resource_group.aks_rg.location
-  resource_group_name = var.azurerm_resource_group.aks_rg.name
+  name                = "python-aks-cluster"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
   dns_prefix          = var.dns_prefix
 
   default_node_pool {
-    name       = "systempool"
+    name       = "default"
     node_count = 2
-    vm_size    = "Standard_D2s_v5"
+    vm_size    = "Standard_D2s_v3"
   }
 
+  # Explicitly configure cluster authentication with the Service Principal
   service_principal {
-    client_id     = var.client_id
-    client_secret = var.client_secret
+    client_id     = "YOUR_SERVICE_PRINCIPAL_CLIENT_ID"
+    client_secret = "YOUR_SERVICE_PRINCIPAL_CLIENT_SECRET"
   }
+}
 
-  tags = {
-    Environment = "Production"
-  }
+# Grant AKS permissions to pull images from ACR
+resource "azurerm_role_assignment" "acr_pull" {
+  principal_id                     = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
+  role_definition_name             = "AcrPull"
+  scope                            = azurerm_container_registry.acr.id
+  skip_service_principal_aad_check = true
 }
